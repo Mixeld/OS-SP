@@ -15,6 +15,7 @@
 
 #define MAX_CHILDREN 100
 #define STAT_CYCLES 2000 
+#define MAX_CYCLES 50
 
 struct pair {
     int a;

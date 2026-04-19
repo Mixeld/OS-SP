@@ -8,7 +8,7 @@ static struct termios orig_termios;
 
 static void disable_raw_mode(){
     tcsetattr (STDIN_FILENO, TCSAFLUSH, &orig_termios);
-    printf("ГГ ТЕРМИНАЛУ\n");
+    printf("ТЕРМИНАЛ\n");
 }
 
 static void enable_raw_mode(){

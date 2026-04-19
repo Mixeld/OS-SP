@@ -1,14 +1,10 @@
 #include "common.h"
+#include <stdlib.h> // <--- Для rand() и srand()
+#include <time.h>   // <--- Для time()
 
 static volatile struct stats_data stats;
-static volatile sig_atomic_t alarm_fired = 0;
 static volatile sig_atomic_t can_print = 0;
 static volatile sig_atomic_t terminate_child = 0;
-
-static void child_alarm_handler(int signum) {
-    (void)signum;
-    alarm_fired = 1;
-}
 
 static void child_usr2_handler(int signum) {
     (void)signum;
@@ -22,11 +18,7 @@ static void child_term_handler(int signum) {
 
 void child_main_loop(void) {
 
-    struct sigaction sa_alarm, sa_usr2, sa_term;
-    
-    memset(&sa_alarm, 0, sizeof(sa_alarm));
-    sa_alarm.sa_handler = child_alarm_handler;
-    sigaction(SIGALRM, &sa_alarm, NULL);
+    struct sigaction sa_usr2, sa_term;
     
     memset(&sa_usr2, 0, sizeof(sa_usr2));
     sa_usr2.sa_handler = child_usr2_handler;
@@ -38,58 +30,31 @@ void child_main_loop(void) {
     
     signal(SIGUSR1, SIG_DFL);
 
-    struct itimerval work_timer;
-    struct itimerval stop_timer;
-    
-    work_timer.it_value.tv_sec     = 0;
-    work_timer.it_value.tv_usec    = 500;   
-    work_timer.it_interval.tv_sec  = 0;
-    work_timer.it_interval.tv_usec = 500;   
+    srand(time(NULL) ^ getpid());
 
-    memset(&stop_timer, 0, sizeof(stop_timer));
-    
-    struct pair data_pair = {0, 0};
-    int toggle = 0;
+    int cycles_completed = 0;  
 
-    while (!terminate_child) {
+    while (!terminate_child && cycles_completed < MAX_CYCLES) {
+        
         stats.s00 = stats.s01 = stats.s10 = stats.s11 = 0;
 
         for (int i = 0; i < STAT_CYCLES && !terminate_child; ++i) {
-            alarm_fired = 0; 
             
-            if (setitimer(ITIMER_REAL, &work_timer, NULL) == -1) {
-                perror("setitimer");
-                break;
-            }
+            int random_choice = rand() % 4;
 
-            while (!alarm_fired && !terminate_child) {
-                if (toggle) {
-                    data_pair.a = 1;
-
-                    if (alarm_fired) break; 
-                    data_pair.b = 1;
-                } else {
-                    data_pair.a = 0;
-                    for (volatile int j = 0; j < 50; j++); 
-                    if (alarm_fired) break; 
-                    data_pair.b = 0;
-                }
-                toggle = !toggle;
+            switch (random_choice) {
+                case 0: stats.s00++; break;
+                case 1: stats.s01++; break;
+                case 2: stats.s10++; break;
+                case 3: stats.s11++; break;
             }
-            
-            if (setitimer(ITIMER_REAL, &stop_timer, NULL) == -1) {
-                perror("setitimer stop");
-            }
-            
-            if (terminate_child) break;
-
-            if      (data_pair.a == 0 && data_pair.b == 0) stats.s00++;
-            else if (data_pair.a == 0 && data_pair.b == 1) stats.s01++;
-            else if (data_pair.a == 1 && data_pair.b == 0) stats.s10++;
-            else if (data_pair.a == 1 && data_pair.b == 1) stats.s11++;
         }
 
         if (terminate_child) break;
+
+        cycles_completed++;
+        printf("[C %d] Cycle %d/%d completed. Waiting for parent permission...\n", 
+               getpid(), cycles_completed, MAX_CYCLES);
 
         if (kill(getppid(), SIGUSR1) == -1) {
             perror("kill SIGUSR1 failed");
@@ -106,8 +71,19 @@ void child_main_loop(void) {
         printf("[C] PPID=%d, PID=%d, stats: {0,0}=%d, {0,1}=%d, {1,0}=%d, {1,1}=%d\n",
                getppid(), getpid(), stats.s00, stats.s01, stats.s10, stats.s11);
         fflush(stdout);
+
+        if (cycles_completed < MAX_CYCLES && !terminate_child) {
+            printf("[C %d] Sleeping 2 seconds before next cycle...\n", getpid());
+            sleep(2);
+        }
     }
     
-    printf("[C %d] Terminating...\n", getpid());
+    if (cycles_completed >= MAX_CYCLES) {
+        printf("[C %d] Reached maximum cycles (%d). Terminating gracefully...\n", 
+               getpid(), MAX_CYCLES);
+    } else {
+        printf("[C %d] Terminated by signal.\n", getpid());
+    }
+    
     exit(0);
 }
