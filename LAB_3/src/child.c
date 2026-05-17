@@ -73,8 +73,7 @@ void child_main_loop(void) {
         fflush(stdout);
 
         if (cycles_completed < MAX_CYCLES && !terminate_child) {
-            printf("[C %d] Sleeping 2 seconds before next cycle...\n", getpid());
-            sleep(2);
+            sleep(1);
         }
     }
     
