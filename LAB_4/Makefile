@@ -1,28 +1,28 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -I$(SRCDIR)
-TARGET = parent
+TARGET = lab4
 SRCDIR = src
-BUILDDIR = build
+BUILDDIR = build/debug
 
-SOURCES = $(SRCDIR)/parent.c $(SRCDIR)/semaphore.c $(SRCDIR)/queue.c \
-          $(SRCDIR)/hash.c $(SRCDIR)/producer.c $(SRCDIR)/consumer.c
+SOURCES = $(SRCDIR)/parent.c $(SRCDIR)/ipc_utils.c \
+          $(SRCDIR)/producer.c $(SRCDIR)/consumer.c
 OBJECTS = $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SOURCES))
 
-all: $(BUILDDIR) $(TARGET)
+all: $(BUILDDIR) $(BUILDDIR)/$(TARGET)
 
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
 
-$(TARGET): $(OBJECTS)
+$(BUILDDIR)/$(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c $(SRCDIR)/common.h | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(BUILDDIR) $(TARGET)
+	rm -rf $(BUILDDIR)
 
-run: $(TARGET)
-	./$(TARGET)
+run: $(BUILDDIR)/$(TARGET)
+	./$(BUILDDIR)/$(TARGET)
 
 .PHONY: all clean run

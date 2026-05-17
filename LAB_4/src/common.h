@@ -14,6 +14,7 @@
 #include <time.h>
 #include <errno.h>
 
+
 #define SHM_KEY 0x1234
 #define SEM_KEY 0x5678
 #define QUEUE_SIZE 10
@@ -44,7 +45,12 @@ typedef struct {
 
 // Глобальные переменные сигналов (объявление)
 extern volatile sig_atomic_t keep_running;
+void reset_keep_running(void);
 void handle_sig(int sig);
+
+//Обработка внешнего сигнала
+void handle_sigterm(int sig);
+void handle_sigint (int sig);
 
 // Прототипы функций IPC
 int create_shared_memory(size_t size);
@@ -64,5 +70,10 @@ Message queue_pop(SharedQueue *q);
 // Прототипы процессов
 void run_producer(int semid, SharedQueue *q);
 void run_consumer(int semid, SharedQueue *q);
+
+//Обработка системнг прерывания 
+void kill_produer (pid_t *prods, int *p_cnt, int index);
+void kill_consumer (pid_t *cons, int *c_cnt, int index);
+void list_processes (pid_t *prods, int p_cnt, pid_t *cons, int c_cnt);
 
 #endif
