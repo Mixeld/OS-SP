@@ -77,4 +77,9 @@ void kill_last_producer(void);
 void kill_last_consumer(void);
 void show_status(SharedQueue *q);
 
+// Функции очистки
+void cleanup_all(SharedQueue *q);
+void cancel_all_threads(void);
+void join_all_threads(void);
+
 #endif

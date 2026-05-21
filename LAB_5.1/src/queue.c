@@ -65,46 +65,63 @@ void queue_init(SharedQueue *q, int size) {
 }
 
 void queue_destroy(SharedQueue *q) {
+    if (!q) return;
+    
+    printf("[Queue] Destroying queue buffer...\n");
+    
+    pthread_mutex_lock(&q->mutex);
+    
     if (q->buffer) {
+        memset(q->buffer, 0, sizeof(Message) * q->queue_size);
         free(q->buffer);
         q->buffer = NULL;
     }
+    
+    q->head = 0;
+    q->tail = 0;
+    q->current_load = 0;
+    q->queue_size = 0;
+    
+    pthread_mutex_unlock(&q->mutex);
+    
     pthread_mutex_destroy(&q->mutex);
     sem_destroy(&q->empty);
     sem_destroy(&q->full);
+    
+    printf("[Queue] Queue destroyed successfully\n");
 }
 
 int queue_push(SharedQueue *q, Message *msg) {
     pthread_mutex_lock(&q->mutex);
-    
+
     if (q->current_load >= q->queue_size) {
         pthread_mutex_unlock(&q->mutex);
         return -1;
     }
-    
+
     q->buffer[q->tail] = *msg;
     q->tail = (q->tail + 1) % q->queue_size;
     q->added_count++;
     q->current_load++;
-    
+
     printf("[Producer %lu] Added message #%d. In queue: %d/%d\n", 
            pthread_self(), q->added_count, q->current_load, q->queue_size);
-    
+
     pthread_mutex_unlock(&q->mutex);
     return 0;
 }
 
 Message queue_pop(SharedQueue *q) {
     pthread_mutex_lock(&q->mutex);
-    
+
     Message msg = q->buffer[q->head];
     q->head = (q->head + 1) % q->queue_size;
     q->extracted_count++;
     q->current_load--;
-    
+
     printf("[Consumer %lu] Popped message #%d. In queue: %d/%d\n", 
            pthread_self(), q->extracted_count, q->current_load, q->queue_size);
-    
+
     pthread_mutex_unlock(&q->mutex);
     return msg;
 }
@@ -117,21 +134,18 @@ int queue_resize(SharedQueue *q, int new_size) {
     
     pthread_mutex_lock(&q->mutex);
     
-    // Проверяем, можно ли уменьшить очередь
     if (new_size < q->current_load) {
         printf("Error: Cannot shrink queue below current load (%d)\n", q->current_load);
         pthread_mutex_unlock(&q->mutex);
         return -1;
     }
     
-    // Создаем новый буфер
     Message *new_buffer = malloc(sizeof(Message) * new_size);
     if (!new_buffer) {
         pthread_mutex_unlock(&q->mutex);
         return -1;
     }
     
-    // Перемещаем сообщения
     for (int i = 0; i < q->current_load; i++) {
         int old_idx = (q->head + i) % q->queue_size;
         new_buffer[i] = q->buffer[old_idx];
@@ -150,7 +164,6 @@ int queue_resize(SharedQueue *q, int new_size) {
     
     pthread_mutex_unlock(&q->mutex);
     
-    // Обновляем семафоры
     sem_destroy(&q->empty);
     sem_destroy(&q->full);
     sem_init(&q->empty, 0, new_size - q->current_load);

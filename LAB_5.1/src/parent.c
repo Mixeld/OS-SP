@@ -4,7 +4,6 @@
 
 SharedQueue *global_queue = NULL;
 
-// Убить последнего производителя
 void kill_last_producer(void) {
     if (p_cnt == 0) {
         printf("Error: No producers to kill\n");
@@ -37,7 +36,6 @@ void kill_last_producer(void) {
     printf("Last producer terminated. Remaining producers: %d\n", p_cnt);
 }
 
-// Убить последнего потребителя
 void kill_last_consumer(void) {
     if (c_cnt == 0) {
         printf("Error: No consumers to kill\n");
@@ -70,7 +68,6 @@ void kill_last_consumer(void) {
     printf("Last consumer terminated. Remaining consumers: %d\n", c_cnt);
 }
 
-// Показать статус
 void show_status(SharedQueue *q) {
     printf("\n--- STATUS ---\n"
            "Queue Size: %d/%d\n"
@@ -84,13 +81,11 @@ void show_status(SharedQueue *q) {
            p_cnt, c_cnt);
 }
 
-// Обработчик сигнала
 void signal_handler(int sig) {
     if (sig == SIGINT || sig == SIGTERM) {
         printf("\n[Parent] Received signal %d, shutting down...\n", sig);
         keep_running = 0;
         
-        // Разблокируем все семафоры
         if (global_queue != NULL) {
             for (int i = 0; i < MAX_THREADS * 2; i++) {
                 sem_post(&global_queue->empty);
@@ -100,13 +95,12 @@ void signal_handler(int sig) {
     }
 }
 
-// Функция для чтения команды с таймаутом
 int read_command(char *cmd, int size, int timeout_sec) {
     fd_set set;
     struct timeval timeout;
     
     FD_ZERO(&set);
-    FD_SET(0, &set);  // STDIN_FILENO
+    FD_SET(0, &set);
     
     timeout.tv_sec = timeout_sec;
     timeout.tv_usec = 0;
@@ -114,9 +108,7 @@ int read_command(char *cmd, int size, int timeout_sec) {
     int result = select(1, &set, NULL, NULL, &timeout);
     
     if (result > 0) {
-        // Есть данные для чтения
         if (fgets(cmd, size, stdin) != NULL) {
-            // Убираем символ новой строки
             size_t len = strlen(cmd);
             if (len > 0 && cmd[len-1] == '\n') {
                 cmd[len-1] = '\0';
@@ -124,7 +116,7 @@ int read_command(char *cmd, int size, int timeout_sec) {
             return 1;
         }
     }
-    return 0; // Нет данных или ошибка
+    return 0;
 }
 
 int main() {
@@ -134,11 +126,10 @@ int main() {
     queue_init(&queue, INITIAL_QUEUE_SIZE);
     global_queue = &queue;
     
-    // Установка обработчиков сигналов
     struct sigaction sa;
     sa.sa_handler = signal_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;  // Перезапускаем системные вызовы
+    sa.sa_flags = SA_RESTART;
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
@@ -151,6 +142,7 @@ int main() {
     printf("  s        - show status\n");
     printf("  q        - quit\n");
     printf("Press Ctrl+C for graceful shutdown\n");
+    printf("> ");
     fflush(stdout);
 
     char cmd[50];
@@ -158,7 +150,6 @@ int main() {
     while (keep_running) {
         memset(cmd, 0, sizeof(cmd));
         
-        // Ждем команду с таймаутом 1 секунду
         if (read_command(cmd, sizeof(cmd), 1)) {
             if (strcmp(cmd, "p") == 0 && p_cnt < MAX_THREADS) {
                 producers[p_cnt].id = p_cnt + 1;
@@ -212,42 +203,8 @@ int main() {
         }
     }
 
-    // Устанавливаем флаг останова
-    keep_running = 0;
-    
-    printf("\n[Parent] Stopping all threads...\n");
-    
-    // Разблокируем все семафоры
-    for (int i = 0; i < MAX_THREADS * 2; i++) {
-        sem_post(&queue.empty);
-        sem_post(&queue.full);
-    }
-    
-    // Ожидаем завершения производителей
-    if (p_cnt > 0) {
-        printf("[Parent] Stopping %d producers...\n", p_cnt);
-        for (int i = 0; i < p_cnt; i++) {
-            if (producers[i].active) {
-                pthread_cancel(producers[i].thread);
-                pthread_join(producers[i].thread, NULL);
-            }
-        }
-    }
-    
-    // Ожидаем завершения потребителей
-    if (c_cnt > 0) {
-        printf("[Parent] Stopping %d consumers...\n", c_cnt);
-        for (int i = 0; i < c_cnt; i++) {
-            if (consumers[i].active) {
-                pthread_cancel(consumers[i].thread);
-                pthread_join(consumers[i].thread, NULL);
-            }
-        }
-    }
-
-    // Освобождение ресурсов
-    printf("[Parent] Cleaning up resources...\n");
-    queue_destroy(&queue);
+    printf("\n[Parent] Starting graceful shutdown...\n");
+    cleanup_all(&queue);
     
     printf("[Parent] Done. Exiting.\n");
     return 0;

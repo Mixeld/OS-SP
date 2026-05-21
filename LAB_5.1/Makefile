@@ -1,14 +1,16 @@
 CC = gcc
 CFLAGS = -Wall -pthread -g
 LDFLAGS = -pthread -lrt
-TARGET = lab51
+TARGET = program
 SRCDIR = src
 BUILDDIR = build/debug
 
 SOURCES = $(SRCDIR)/parent.c \
           $(SRCDIR)/queue.c \
           $(SRCDIR)/producer.c \
-          $(SRCDIR)/consumer.c
+          $(SRCDIR)/consumer.c \
+          $(SRCDIR)/message.c \
+          $(SRCDIR)/cleanup.c
 
 OBJECTS = $(addprefix $(BUILDDIR)/, $(notdir $(SOURCES:.c=.o)))
 
@@ -21,12 +23,12 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c $(SRCDIR)/common.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(OBJECTS) $(LDFLAGS) -o $(BUILDDIR)/$@
+	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 
 clean:
-	rm -rf $(BUILDDIR)
+	rm -rf $(BUILDDIR) $(TARGET)
 
 run: $(TARGET)
-	./$(BUILDDIR)/$(TARGET)
+	./$(TARGET)
 
 .PHONY: all clean run
