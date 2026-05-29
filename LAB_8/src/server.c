@@ -1,16 +1,29 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <time.h>
+#include <signal.h>
+#include <pthread.h>
 #include "protocol.h"
 
 time_t g_start_time;
+int g_client_count = 0;
 
-void handle_client(int client_fd, const char *client_ip)
+
+typedef struct {
+    int fd;
+    char ip[INET_ADDRSTRLEN];
+    int id;
+} client_info_t;
+
+
+
+void handle_client(int client_fd, const char *client_ip, int client_id)
 {
     char buf[BUF_SIZE];
     ssize_t n;
 
-    printf("[S] Сеанс с %s начат\n", client_ip);
+    printf("[S] (%d) Сеанс с %s начат\n", client_id, client_ip);
 
     send_ok(client_fd, "Для получения наберите HELP!");
 
@@ -26,7 +39,7 @@ void handle_client(int client_fd, const char *client_ip)
             break;
         }
 
-        printf("[S] %s >>> \"%s\"\n", client_ip, buf);
+        printf("[S] #%d (%s) >>> \"%s\"\n", client_id, client_ip, buf);
 
         /* Передаём строку в протокол */
         if (dispatch_command(client_fd, buf) == 0) {
@@ -39,8 +52,22 @@ void handle_client(int client_fd, const char *client_ip)
     printf("[S] Соединение с %s закрыто\n", client_ip);
 }
 
+
+void *client_trhread(void *arg){
+    client_info_t *info = (client_info_t *)arg;
+
+    handle_client(info-> fd, info ->ip, info -> id);
+    free(info);
+
+    return NULL;
+}
+
 int main (void){
     
+    g_start_time = time(NULL);
+
+    signal(SIGPIPE, SIG_IGN);
+
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) { perror("socket"); exit(1); }
 
@@ -66,18 +93,44 @@ int main (void){
     printf("[S] Запущен на порту %d\n", PORT);
     printf("[S] Жду подключений...\n");
 
+    while (1){
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
 
     int client_fd = accept(server_fd,(struct sockaddr*)&client_addr,&client_len);
-    if (client_fd < 0) { perror("accept"); exit(1); }
+    
+    if (client_fd < 0) {
+        perror("accept"); 
+        continue; 
+    }
 
-    char client_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
+    g_client_count++;
 
-    printf("[S] Подключился клиент: %s\n", client_ip);
+    client_info_t *info = malloc(sizeof(client_info_t));
 
-    handle_client(client_fd, client_ip);
+    if (info == NULL) {
+        fprintf(stderr, "malloc failed\n");
+        close(client_fd);
+        continue;
+    }
+
+    info->fd = client_fd;
+    info->id = g_client_count;
+    inet_ntop(AF_INET, &client_addr.sin_addr, info->ip, sizeof(info->ip));
+
+    printf("[S] Подключился клиент #%d: %s\n", info->id, info->ip);
+
+    pthread_t tid;
+
+    if (pthread_create(&tid, NULL, client_trhread, info) != 0) {
+            perror("pthread_create");
+            close(client_fd);
+            free(info);
+            continue;
+    }
+
+    pthread_detach(tid);
+    }
 
     close(server_fd);
     printf("[S] Завершение работы\n");
